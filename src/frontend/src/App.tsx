@@ -123,6 +123,8 @@ export default function App() {
   );
   const [imgPreviewUrl, setImgPreviewUrl] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [globalDragging, setGlobalDragging] = useState(false);
+  const dragCounter = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const changeFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -203,6 +205,41 @@ export default function App() {
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, []);
+
+  // Global drag-and-drop: listen on window for drag events
+  useEffect(() => {
+    const onDragEnter = (e: DragEvent) => {
+      e.preventDefault();
+      dragCounter.current += 1;
+      if (dragCounter.current === 1) setGlobalDragging(true);
+    };
+    const onDragOver = (e: DragEvent) => {
+      e.preventDefault();
+    };
+    const onDragLeave = (e: DragEvent) => {
+      e.preventDefault();
+      dragCounter.current -= 1;
+      if (dragCounter.current === 0) setGlobalDragging(false);
+    };
+    const onDrop = (e: DragEvent) => {
+      e.preventDefault();
+      dragCounter.current = 0;
+      setGlobalDragging(false);
+      const file = e.dataTransfer?.files[0];
+      if (file) handleFileLoad(file);
+    };
+
+    window.addEventListener("dragenter", onDragEnter);
+    window.addEventListener("dragover", onDragOver);
+    window.addEventListener("dragleave", onDragLeave);
+    window.addEventListener("drop", onDrop);
+    return () => {
+      window.removeEventListener("dragenter", onDragEnter);
+      window.removeEventListener("dragover", onDragOver);
+      window.removeEventListener("dragleave", onDragLeave);
+      window.removeEventListener("drop", onDrop);
+    };
+  }, [handleFileLoad]);
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
@@ -287,6 +324,71 @@ export default function App() {
       }}
       data-ocid="app.page"
     >
+      {/* Global drag-and-drop overlay */}
+      {globalDragging && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            background: "rgba(0, 0, 0, 0.75)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            pointerEvents: "none",
+          }}
+          data-ocid="file.dropzone"
+        >
+          <div
+            style={{
+              border: `3px dashed ${D.accent}`,
+              borderRadius: 16,
+              padding: "48px 72px",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 16,
+              background: "rgba(0, 120, 212, 0.08)",
+              animation: "pulse-border 1s ease-in-out infinite",
+            }}
+          >
+            <Upload
+              style={{
+                width: 64,
+                height: 64,
+                color: D.accent,
+                filter: "drop-shadow(0 0 12px rgba(0,120,212,0.6))",
+              }}
+            />
+            <span
+              style={{
+                color: "#fff",
+                fontSize: 22,
+                fontWeight: 700,
+                letterSpacing: "0.02em",
+                textShadow: "0 2px 8px rgba(0,0,0,0.8)",
+              }}
+            >
+              Drop file to open
+            </span>
+            <span
+              style={{
+                color: D.textMuted,
+                fontSize: 13,
+              }}
+            >
+              Image or PDF — dropped anywhere in the window
+            </span>
+          </div>
+          <style>{`
+            @keyframes pulse-border {
+              0%, 100% { box-shadow: 0 0 0 0 rgba(0,120,212,0.3); }
+              50% { box-shadow: 0 0 0 12px rgba(0,120,212,0); }
+            }
+          `}</style>
+        </div>
+      )}
+
       {/* Left Sidebar */}
       <aside
         className="flex flex-col overflow-hidden flex-shrink-0"
@@ -597,7 +699,7 @@ export default function App() {
               )}
             </div>
             {/* Tool controls */}
-            <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 flex flex-col overflow-y-auto">
               {uploadedFile || !toolNeedsFile ? (
                 renderTool()
               ) : (
